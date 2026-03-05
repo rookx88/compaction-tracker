@@ -338,7 +338,41 @@ def _openai_complete(prompt: str, model: str, max_output_tokens: int = 2200) -> 
     return text
 
 
-def evolve_skill(genome, pre_results: dict, evolver_model: str = "gpt-4o") -> tuple[str, str]:
+def _local_evolve_skill(genome, pre_results: dict) -> tuple[str, str]:
+    tasks = pre_results.get("tasks", [])
+    if not tasks:
+        return genome.prompt, "[Local evolver: no tasks available; keeping prompt unchanged.]"
+
+    weakest = min(tasks, key=lambda t: t.get("score", 0.0))
+    weakest_task = weakest.get("task", "unknown")
+    weakest_score = float(weakest.get("score", 0.0))
+
+    if pre_results.get("overall", 0.0) >= 0.999:
+        return genome.prompt, "[Local evolver: benchmark already saturated; no mutation applied.]"
+
+    addendum = (
+        "\n\n## Benchmark-driven Clarification\n"
+        f"- Priority focus: improve robustness for {weakest_task} (score={weakest_score:.3f}).\n"
+        "- When post-compaction assistant input is ambiguous, explicitly label uncertainty in notes.\n"
+    )
+
+    if addendum.strip() in genome.prompt:
+        return genome.prompt, "[Local evolver: candidate mutation already present; no further surgical edit found.]"
+
+    return genome.prompt.rstrip() + addendum, (
+        f"Local heuristic mutation targets weakest benchmark task ({weakest_task}) to improve scoring clarity."
+    )
+
+
+def evolve_skill(
+    genome,
+    pre_results: dict,
+    evolver: str = "local",
+    evolver_model: str = "gpt-4o",
+) -> tuple[str, str]:
+    if evolver == "local":
+        return _local_evolve_skill(genome, pre_results)
+
     prompt = build_evolution_prompt(genome, pre_results)
     try:
         response_text = _openai_complete(prompt, model=evolver_model)
@@ -350,13 +384,11 @@ def evolve_skill(genome, pre_results: dict, evolver_model: str = "gpt-4o") -> tu
         if not hypothesis:
             hypothesis = "[No hypothesis tag returned by evolver model]"
 
-        # Guardrail: avoid accidental empty/no-op writes.
         if not new_skill.strip():
             raise RuntimeError("Evolver returned empty SKILL content")
 
         return new_skill, hypothesis
     except Exception as e:
-        # Safe fallback keeps pipeline functioning.
         return genome.prompt, f"[Evolution fallback: {e}]"
 
 
@@ -378,6 +410,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Run benchmarks but don't apply changes")
     parser.add_argument("--judge", choices=["deterministic", "llm"], default="deterministic")
     parser.add_argument("--regression-threshold", type=float, default=0.05)
+    parser.add_argument("--evolver", choices=["local", "openai"], default=os.getenv("EVOLVER", "local"))
     parser.add_argument("--evolver-model", default=os.getenv("EVOLVER_MODEL", "gpt-4o"))
     parser.add_argument("--min-prompt-diff", type=float, default=0.01, help="Minimum prompt diff ratio to accept mutation")
     parser.add_argument("--require-improvement", action="store_true", help="Only accept if post-score > pre-score")
@@ -396,7 +429,7 @@ def main():
 
     genome = SkillGenome.load(skill_dir)
     gen = genome.config.get("version", 0)
-    print(f"[evolve_skills] Skill: {genome.name} | Gen: {gen} | Judge: {args.judge} | Evolver: {args.evolver_model}")
+    print(f"[evolve_skills] Skill: {genome.name} | Gen: {gen} | Judge: {args.judge} | Evolver: {args.evolver}:{args.evolver_model}")
 
     tasks = find_benchmark_tasks(benchmarks_dir, args.skill)
     print(f"[evolve_skills] Benchmark tasks: {len(tasks)}")
@@ -412,6 +445,7 @@ def main():
             "generationBefore": gen,
             "generationAfter": gen,
             "judge": args.judge,
+            "evolver": args.evolver,
             "evolverModel": args.evolver_model,
             "status": "dry-run",
             "reason": "mutation skipped",
@@ -427,7 +461,7 @@ def main():
         return
 
     old_prompt = genome.prompt
-    new_prompt, hypothesis = evolve_skill(genome, pre_results, evolver_model=args.evolver_model)
+    new_prompt, hypothesis = evolve_skill(genome, pre_results, evolver=args.evolver, evolver_model=args.evolver_model)
 
     diff_ratio = _prompt_diff_ratio(old_prompt, new_prompt)
     if diff_ratio < args.min_prompt_diff:
@@ -447,6 +481,7 @@ def main():
             "generationBefore": gen,
             "generationAfter": gen,
             "judge": args.judge,
+            "evolver": args.evolver,
             "evolverModel": args.evolver_model,
             "status": "rejected",
             "reason": f"diff ratio {diff_ratio:.4f} below threshold {args.min_prompt_diff:.4f}",
@@ -494,7 +529,8 @@ def main():
         "generationBefore": gen,
         "generationAfter": genome.config.get("version", gen),
         "judge": args.judge,
-        "evolverModel": args.evolver_model,
+        "evolver": args.evolver,
+            "evolverModel": args.evolver_model,
         "status": status,
         "reason": "ok" if status == "accepted" else "regression",
         "preScore": pre_results["overall"],
