@@ -1,0 +1,9 @@
+{
+  "description": "Negative delta handling",
+  "input": "Analyze /home/ocsam/projects/compaction-tracker/benchmarks/fixtures/negative-delta.jsonl and report compaction overhead.",
+  "groundTruth": {
+    "compactionCount": 1,
+    "scoredCompactions": 1,
+    "deltaSign": "negative"
+  }
+}

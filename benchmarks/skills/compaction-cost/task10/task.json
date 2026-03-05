@@ -1,0 +1,8 @@
+{
+  "description": "Early compaction with sparse pre-history",
+  "input": "Analyze /home/ocsam/projects/compaction-tracker/benchmarks/fixtures/early-compaction.jsonl and report handling of sparse pre-compaction context.",
+  "groundTruth": {
+    "compactionCount": 2,
+    "scoredCompactions": 1
+  }
+}

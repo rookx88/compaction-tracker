@@ -152,3 +152,14 @@ Example strict run:
 ```bash
 OPENAI_API_KEY=... PYTHONPATH=src python -m nous.evolve_skills   --skill compaction-cost --root . --judge llm   --min-prompt-diff 0.02 --require-improvement
 ```
+
+
+### Expanded benchmark pack
+
+Added harder scenarios to create learning headroom:
+- `task7`: negative delta behavior
+- `task8`: unscorable (no post assistant input)
+- `task9`: malformed JSONL line tolerance
+- `task10`: early compaction with sparse pre-history
+
+Fixtures are in `benchmarks/fixtures/` and are versioned in git.

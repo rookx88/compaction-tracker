@@ -1,0 +1,8 @@
+{
+  "description": "Malformed lines should be ignored safely",
+  "input": "Analyze /home/ocsam/projects/compaction-tracker/benchmarks/fixtures/malformed-mixed.jsonl and estimate overhead.",
+  "groundTruth": {
+    "compactionCount": 2,
+    "scoredCompactions": 2
+  }
+}

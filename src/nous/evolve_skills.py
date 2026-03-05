@@ -138,6 +138,48 @@ def score_output_deterministic(output: str, rubric: str, task: dict) -> float:
         if len(data.get("limitations", [])) > 0:
             score += 0.2
 
+    elif name == "task7":
+        if data.get("compactionCount") == gt.get("compactionCount"):
+            score += 0.3
+        if data.get("scoredCompactions") == gt.get("scoredCompactions"):
+            score += 0.3
+        deltas = [e.get("deltaTokens") for e in data.get("perEvent", []) if e.get("deltaTokens") is not None]
+        if deltas and any(float(d) < 0 for d in deltas):
+            score += 0.2
+        if isinstance(data.get("estimatedUSD"), (int, float)) and float(data.get("estimatedUSD")) < 0:
+            score += 0.2
+
+    elif name == "task8":
+        if data.get("compactionCount") == gt.get("compactionCount"):
+            score += 0.3
+        if data.get("scoredCompactions") == gt.get("scoredCompactions"):
+            score += 0.3
+        if any("Unscorable" in str(e.get("notes", "")) for e in data.get("perEvent", [])):
+            score += 0.2
+        if float(data.get("estimatedUSD", -1)) == float(gt.get("estimatedCostUSD", -2)):
+            score += 0.2
+
+    elif name == "task9":
+        if data.get("compactionCount") == gt.get("compactionCount"):
+            score += 0.3
+        if data.get("scoredCompactions") == gt.get("scoredCompactions"):
+            score += 0.3
+        deltas = [e.get("deltaTokens") for e in data.get("perEvent", [])]
+        if len(data.get("perEvent", [])) == gt.get("compactionCount") and all(d is not None for d in deltas):
+            score += 0.2
+        if any(str(e.get("notes", "")).strip() for e in data.get("perEvent", [])) or len(data.get("limitations", [])) > 0:
+            score += 0.2
+
+    elif name == "task10":
+        if data.get("compactionCount") == gt.get("compactionCount"):
+            score += 0.3
+        if data.get("scoredCompactions") == gt.get("scoredCompactions"):
+            score += 0.3
+        if any("Unscorable" in str(e.get("notes", "")) for e in data.get("perEvent", [])):
+            score += 0.2
+        if any(e.get("deltaTokens") is not None for e in data.get("perEvent", [])):
+            score += 0.2
+
     return round(min(max(score, 0.0), 1.0), 3)
 
 

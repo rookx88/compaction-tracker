@@ -1,0 +1,9 @@
+{
+  "description": "Unscorable event: no post assistant usage.input",
+  "input": "Analyze /home/ocsam/projects/compaction-tracker/benchmarks/fixtures/no-post-assistant.jsonl with the input spike delta method.",
+  "groundTruth": {
+    "compactionCount": 1,
+    "scoredCompactions": 0,
+    "estimatedCostUSD": 0.0
+  }
+}

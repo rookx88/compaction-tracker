@@ -1,0 +1,5 @@
+{"type":"message","id":"a1","message":{"role":"assistant","usage":{"input":2000}}}
+{"type":"message","id":"a2","message":{"role":"assistant","usage":{"input":2200}}}
+{"type":"message","id":"a3","message":{"role":"assistant","usage":{"input":2100}}}
+{"type":"compaction","id":"c1","timestamp":"2026-03-03T08:00:00Z","tokensBefore":130000}
+{"type":"message","id":"a4","message":{"role":"assistant","usage":{"input":1500}}}

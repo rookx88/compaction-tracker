@@ -1,0 +1,7 @@
+{"type":"message","id":"a1","message":{"role":"assistant","usage":{"input":700}}}
+NOT JSON AT ALL
+{"type":"compaction","id":"c1","timestamp":"2026-03-04T10:00:00Z","tokensBefore":112000}
+{"type":"message","id":"a2","message":{"role":"assistant","usage":{"input":1200}}}
+{"type":"message","id":"a3","message":{"role":"assistant","usage":{"input":800}}}
+{"type":"compaction","id":"c2","timestamp":"2026-03-04T10:10:00Z","tokensBefore":113000}
+{"type":"message","id":"a4","message":{"role":"assistant","usage":{"input":1400}}}
