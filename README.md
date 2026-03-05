@@ -137,3 +137,18 @@ CLI flag:
 - `--evolver-model <model>` overrides `EVOLVER_MODEL`
 
 If mutation API/parsing fails, the run safely falls back to the current prompt and records a fallback hypothesis.
+
+
+### Mutation acceptance gates
+
+Evolution now has stricter acceptance controls:
+
+- `--min-prompt-diff` (default `0.01`): rejects near no-op prompt mutations.
+- `--require-improvement`: only accepts mutation when post-score is strictly greater than pre-score.
+- Existing `--regression-threshold` still reverts if score drop exceeds threshold.
+
+Example strict run:
+
+```bash
+OPENAI_API_KEY=... PYTHONPATH=src python -m nous.evolve_skills   --skill compaction-cost --root . --judge llm   --min-prompt-diff 0.02 --require-improvement
+```

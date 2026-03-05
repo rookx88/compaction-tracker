@@ -277,6 +277,18 @@ def _extract_tag(text: str, tag: str) -> str | None:
     return m.group(1).strip()
 
 
+def _prompt_diff_ratio(old: str, new: str) -> float:
+    old_lines = old.splitlines()
+    new_lines = new.splitlines()
+    if not old_lines and not new_lines:
+        return 0.0
+    old_set = set(old_lines)
+    new_set = set(new_lines)
+    symmetric = old_set.symmetric_difference(new_set)
+    denom = max(len(old_set.union(new_set)), 1)
+    return len(symmetric) / denom
+
+
 def _openai_complete(prompt: str, model: str, max_output_tokens: int = 2200) -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -356,6 +368,8 @@ def main():
     parser.add_argument("--judge", choices=["deterministic", "llm"], default="deterministic")
     parser.add_argument("--regression-threshold", type=float, default=0.05)
     parser.add_argument("--evolver-model", default=os.getenv("EVOLVER_MODEL", "gpt-4o"))
+    parser.add_argument("--min-prompt-diff", type=float, default=0.01, help="Minimum prompt diff ratio to accept mutation")
+    parser.add_argument("--require-improvement", action="store_true", help="Only accept if post-score > pre-score")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
@@ -386,6 +400,22 @@ def main():
 
     old_prompt = genome.prompt
     new_prompt, hypothesis = evolve_skill(genome, pre_results, evolver_model=args.evolver_model)
+
+    diff_ratio = _prompt_diff_ratio(old_prompt, new_prompt)
+    if diff_ratio < args.min_prompt_diff:
+        print(f"[evolve_skills] Mutation rejected: diff ratio {diff_ratio:.4f} < {args.min_prompt_diff:.4f}.")
+        post_results = pre_results
+        delta = 0.0
+        entry = (
+            f"\n## Gen {gen + 1} — {datetime.now().strftime('%Y-%m-%d')} (REJECTED)"
+            f"\nHypothesis: {hypothesis}"
+            f"\nReason: prompt diff ratio {diff_ratio:.4f} below threshold {args.min_prompt_diff:.4f}."
+            f"\nPre: {pre_results['overall']:.3f} | Post: {pre_results['overall']:.3f} | Delta: +0.000 ✗ NO-OP\n"
+        )
+        genome.append_history(entry)
+        print("[evolve_skills] Done. History updated.")
+        return
+
     genome.save_prompt(new_prompt)
 
     print("[evolve_skills] Running post-evolution benchmarks...")
