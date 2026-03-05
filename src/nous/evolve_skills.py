@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -138,10 +141,75 @@ def score_output_deterministic(output: str, rubric: str, task: dict) -> float:
     return round(min(max(score, 0.0), 1.0), 3)
 
 
+def _openai_judge_score(output: str, rubric: str, task: dict) -> float:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+
+    model = os.getenv("JUDGE_MODEL", "gpt-4o-mini")
+    prompt = (
+        "You are a strict benchmark judge. Score the candidate output against the rubric. "
+        "Return ONLY valid JSON: {\"score\": <0.0-1.0 number>, \"reason\": \"short text\"}.\n\n"
+        f"Task name: {task.get('_name')}\n"
+        f"Task description: {task.get('description')}\n"
+        f"Task input: {task.get('input')}\n"
+        f"Ground truth: {json.dumps(task.get('groundTruth', {}), ensure_ascii=False)}\n\n"
+        f"Rubric:\n{rubric}\n\n"
+        f"Candidate output:\n{output}\n"
+    )
+
+    body = {
+        "model": model,
+        "input": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}],
+            }
+        ],
+        "temperature": 0,
+        "max_output_tokens": 200,
+    }
+
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"OpenAI judge HTTP error: {e.code} {e.reason}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"OpenAI judge network error: {e.reason}") from e
+
+    text = payload.get("output_text")
+    if not text:
+        # fallback: try to collect text fragments
+        text_parts: list[str] = []
+        for item in payload.get("output", []):
+            for c in item.get("content", []):
+                if c.get("type") == "output_text" and c.get("text"):
+                    text_parts.append(c["text"])
+        text = "\n".join(text_parts)
+
+    try:
+        judged = json.loads(text)
+        score = float(judged.get("score", 0.0))
+    except Exception as e:
+        raise RuntimeError(f"Could not parse judge response as JSON score: {text!r}") from e
+
+    return round(min(max(score, 0.0), 1.0), 3)
+
+
 def score_output(output: str, rubric: str, task: dict, judge: str = "deterministic") -> float:
     if judge == "llm":
-        # Placeholder until live LLM judge wiring is added.
-        return score_output_deterministic(output, rubric, task)
+        return _openai_judge_score(output, rubric, task)
     return score_output_deterministic(output, rubric, task)
 
 
@@ -149,8 +217,18 @@ def run_benchmarks(genome, tasks: list[dict], judge: str = "deterministic") -> d
     results = []
     for task in tasks:
         output = run_skill_on_task(genome, task)
-        score = score_output(output, task.get("_rubric", ""), task, judge=judge)
-        results.append({"task": task.get("_name"), "score": score, "output": output})
+        try:
+            score = score_output(output, task.get("_rubric", ""), task, judge=judge)
+            judge_error = None
+        except Exception as e:
+            # Safe fallback keeps run alive.
+            score = score_output_deterministic(output, task.get("_rubric", ""), task)
+            judge_error = str(e)
+
+        result = {"task": task.get("_name"), "score": score, "output": output}
+        if judge_error:
+            result["judgeError"] = judge_error
+        results.append(result)
 
     total = sum(r["score"] for r in results) / len(results) if results else 0.0
     return {"tasks": results, "overall": total}

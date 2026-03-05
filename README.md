@@ -85,8 +85,17 @@ PYTHONPATH=src python -m nous.evolve_skills --skill compaction-cost --root . --j
 ```
 
 `--judge` supports:
-- `deterministic` (default, implemented)
-- `llm` (currently routed to deterministic placeholder until live judge wiring)
+- `deterministic` (default, local deterministic scorer)
+- `llm` (OpenAI rubric judge via `OPENAI_API_KEY`; `JUDGE_MODEL` optional, default `gpt-4o-mini`)
+
+Example LLM-judge run:
+
+```bash
+OPENAI_API_KEY=... JUDGE_MODEL=gpt-4o-mini \
+PYTHONPATH=src python -m nous.evolve_skills --skill compaction-cost --root . --dry-run --judge llm
+```
+
+If LLM judging fails for a task (missing key/network/parsing), the harness falls back to deterministic scoring for that task and records `judgeError` in results.
 
 ## Add new benchmark tasks
 
