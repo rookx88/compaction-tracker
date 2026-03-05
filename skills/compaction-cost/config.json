@@ -1,0 +1,5 @@
+{
+  "model": "anthropic/claude-sonnet-4-6",
+  "max_turns": 5,
+  "version": 1
+}

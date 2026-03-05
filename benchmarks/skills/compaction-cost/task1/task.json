@@ -1,0 +1,9 @@
+{
+  "description": "Basic compaction detection",
+  "input": "Analyze the session file at /tmp/sample-compaction-session.jsonl. How many compaction events occurred and when did they happen?",
+  "groundTruth": {
+    "compactionCount": 1,
+    "timestamps": ["2026-02-26T04:22:25.955Z"],
+    "tokensBefore": 110121
+  }
+}

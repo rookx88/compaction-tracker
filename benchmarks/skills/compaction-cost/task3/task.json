@@ -1,0 +1,9 @@
+{
+  "description": "Zero compaction edge case",
+  "input": "A session file has been analyzed and contains 0 compaction events. What should the compaction cost report say?",
+  "groundTruth": {
+    "compactionCount": 0,
+    "estimatedCostUSD": 0.0,
+    "message": "No compaction overhead detected in this session."
+  }
+}

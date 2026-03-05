@@ -1,0 +1,9 @@
+{
+  "description": "Cost estimation accuracy",
+  "input": "Analyze /tmp/sample-compaction-session.jsonl. Estimate the token cost and USD cost of the compaction overhead using the input spike delta method.",
+  "groundTruth": {
+    "method": "input spike delta",
+    "estimatedTokens": "varies by calculation",
+    "estimatedUSD": "varies by calculation"
+  }
+}
