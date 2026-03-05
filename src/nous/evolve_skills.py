@@ -360,6 +360,17 @@ def evolve_skill(genome, pre_results: dict, evolver_model: str = "gpt-4o") -> tu
         return genome.prompt, f"[Evolution fallback: {e}]"
 
 
+def _write_run_report(root: Path, payload: dict) -> None:
+    reports_dir = root / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    latest = reports_dir / "last-run.json"
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    archived = reports_dir / f"run-{timestamp}.json"
+    content = json.dumps(payload, indent=2)
+    latest.write_text(content + "\n")
+    archived.write_text(content + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Evolve an OpenClaw skill via Nous")
     parser.add_argument("--skill", required=True, help="Skill name (e.g. compaction-cost)")
@@ -395,7 +406,24 @@ def main():
     print(f"[evolve_skills] Pre-score: {pre_results['overall']:.3f}")
 
     if args.dry_run:
+        _write_run_report(root, {
+            "timestamp": datetime.now().isoformat(),
+            "skill": genome.name,
+            "generationBefore": gen,
+            "generationAfter": gen,
+            "judge": args.judge,
+            "evolverModel": args.evolver_model,
+            "status": "dry-run",
+            "reason": "mutation skipped",
+            "preScore": pre_results["overall"],
+            "postScore": pre_results["overall"],
+            "delta": 0.0,
+            "diffRatio": None,
+            "versionBumped": False,
+            "taskCount": len(tasks),
+        })
         print("[evolve_skills] Dry run — skipping evolution and mutation.")
+        print(f"[evolve_skills] Report: {root / 'reports' / 'last-run.json'}")
         return
 
     old_prompt = genome.prompt
@@ -413,7 +441,25 @@ def main():
             f"\nPre: {pre_results['overall']:.3f} | Post: {pre_results['overall']:.3f} | Delta: +0.000 ✗ NO-OP\n"
         )
         genome.append_history(entry)
+        _write_run_report(root, {
+            "timestamp": datetime.now().isoformat(),
+            "skill": genome.name,
+            "generationBefore": gen,
+            "generationAfter": gen,
+            "judge": args.judge,
+            "evolverModel": args.evolver_model,
+            "status": "rejected",
+            "reason": f"diff ratio {diff_ratio:.4f} below threshold {args.min_prompt_diff:.4f}",
+            "preScore": pre_results["overall"],
+            "postScore": pre_results["overall"],
+            "delta": 0.0,
+            "diffRatio": round(diff_ratio, 6),
+            "versionBumped": False,
+            "taskCount": len(tasks),
+            "hypothesis": hypothesis,
+        })
         print("[evolve_skills] Done. History updated.")
+        print(f"[evolve_skills] Report: {root / 'reports' / 'last-run.json'}")
         return
 
     genome.save_prompt(new_prompt)
@@ -441,7 +487,26 @@ def main():
         )
 
     genome.append_history(entry)
+    status = "accepted" if delta >= -args.regression_threshold else "reverted"
+    _write_run_report(root, {
+        "timestamp": datetime.now().isoformat(),
+        "skill": genome.name,
+        "generationBefore": gen,
+        "generationAfter": genome.config.get("version", gen),
+        "judge": args.judge,
+        "evolverModel": args.evolver_model,
+        "status": status,
+        "reason": "ok" if status == "accepted" else "regression",
+        "preScore": pre_results["overall"],
+        "postScore": post_results["overall"],
+        "delta": round(delta, 6),
+        "diffRatio": round(diff_ratio, 6),
+        "versionBumped": status == "accepted",
+        "taskCount": len(tasks),
+        "hypothesis": hypothesis,
+    })
     print("[evolve_skills] Done. History updated.")
+    print(f"[evolve_skills] Report: {root / 'reports' / 'last-run.json'}")
 
 
 if __name__ == "__main__":
