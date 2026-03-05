@@ -123,3 +123,17 @@ This complements model-routing savings by exposing hidden context-management ove
 
 - https://github.com/nous-research/nous
 - Local source: `/home/ocsam/.openclaw/workspace/nous/nous-main/`
+
+
+## Real prompt mutation (new)
+
+Evolution now attempts to mutate `SKILL.md` via OpenAI Responses API.
+
+Environment variables:
+- `OPENAI_API_KEY` (required for live mutation)
+- `EVOLVER_MODEL` (optional, default `gpt-4o`)
+
+CLI flag:
+- `--evolver-model <model>` overrides `EVOLVER_MODEL`
+
+If mutation API/parsing fails, the run safely falls back to the current prompt and records a fallback hypothesis.

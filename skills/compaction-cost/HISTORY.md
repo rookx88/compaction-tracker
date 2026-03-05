@@ -5,3 +5,8 @@ Method: Input spike delta method
 Hypothesis: The delta between average pre-compaction input tokens and first post-compaction input tokens approximates the summarization overhead.
 Result: Pending first benchmark run.
 Known weaknesses: May overcount on tool-heavy sessions; does not account for memoryFlush message tokens.
+
+
+## Gen 2 — 2026-03-05
+Hypothesis: [Evolution fallback: OpenAI HTTP error: 400 Bad Request]
+Pre: 1.000 | Post: 1.000 | Delta: +0.000 ✓

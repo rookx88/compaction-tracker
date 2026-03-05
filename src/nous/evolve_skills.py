@@ -235,33 +235,117 @@ def run_benchmarks(genome, tasks: list[dict], judge: str = "deterministic") -> d
 
 
 def build_evolution_prompt(genome, pre_results: dict) -> str:
-    return f"""You are evolving an OpenClaw skill to improve its benchmark scores.
+    return f"""You are evolving an OpenClaw skill to improve benchmark scores.
 
 ## Skill: {genome.name}
 
-### Current SKILL.md (the prompt being evolved):
+### Current SKILL.md
 {genome.prompt}
 
-### TESTS.md (what good looks like):
+### TESTS.md
 {genome.tests}
 
-### HISTORY.md (what has been tried before):
+### HISTORY.md
 {genome.history}
 
-### Current benchmark results (overall: {pre_results['overall']:.2f}):
+### Current benchmark results (overall: {pre_results['overall']:.3f})
 {json.dumps(pre_results['tasks'], indent=2)}
 
-## Your task:
-1. Identify ONE specific weakness in the current skill prompt
-2. Propose a single targeted change to SKILL.md that addresses it
-3. Write the complete updated SKILL.md
-4. Explain your hypothesis: why will this change improve the score?
+## Task
+Make EXACTLY ONE targeted improvement to SKILL.md that is likely to improve benchmark score.
+
+Rules:
+- One change only (surgical edit)
+- Keep intent and method consistent (input spike delta)
+- Preserve output requirements
+- Do not add new external dependencies
+
+Output format (mandatory):
+<SKILL>
+...complete new SKILL.md content...
+</SKILL>
+<HYPOTHESIS>
+...1-3 sentences explaining why this single change should improve score...
+</HYPOTHESIS>
 """
 
 
-def evolve_skill(genome, pre_results: dict) -> tuple[str, str]:
-    _ = build_evolution_prompt(genome, pre_results)
-    return genome.prompt, "[Hypothesis placeholder — wire to claude SDK to run live evolution]"
+def _extract_tag(text: str, tag: str) -> str | None:
+    m = re.search(rf"<{tag}>(.*?)</{tag}>", text, flags=re.DOTALL | re.IGNORECASE)
+    if not m:
+        return None
+    return m.group(1).strip()
+
+
+def _openai_complete(prompt: str, model: str, max_output_tokens: int = 2200) -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+
+    body = {
+        "model": model,
+        "input": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}],
+            }
+        ],
+        "temperature": 0.2,
+        "max_output_tokens": max_output_tokens,
+    }
+
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"OpenAI HTTP error: {e.code} {e.reason}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"OpenAI network error: {e.reason}") from e
+
+    text = payload.get("output_text")
+    if not text:
+        parts: list[str] = []
+        for item in payload.get("output", []):
+            for c in item.get("content", []):
+                if c.get("type") == "output_text" and c.get("text"):
+                    parts.append(c["text"])
+        text = "\n".join(parts)
+
+    if not text:
+        raise RuntimeError("Model returned empty output")
+    return text
+
+
+def evolve_skill(genome, pre_results: dict, evolver_model: str = "gpt-4o") -> tuple[str, str]:
+    prompt = build_evolution_prompt(genome, pre_results)
+    try:
+        response_text = _openai_complete(prompt, model=evolver_model)
+        new_skill = _extract_tag(response_text, "SKILL")
+        hypothesis = _extract_tag(response_text, "HYPOTHESIS")
+
+        if not new_skill:
+            raise RuntimeError("Missing <SKILL>...</SKILL> in evolver response")
+        if not hypothesis:
+            hypothesis = "[No hypothesis tag returned by evolver model]"
+
+        # Guardrail: avoid accidental empty/no-op writes.
+        if not new_skill.strip():
+            raise RuntimeError("Evolver returned empty SKILL content")
+
+        return new_skill, hypothesis
+    except Exception as e:
+        # Safe fallback keeps pipeline functioning.
+        return genome.prompt, f"[Evolution fallback: {e}]"
 
 
 def main():
@@ -271,6 +355,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Run benchmarks but don't apply changes")
     parser.add_argument("--judge", choices=["deterministic", "llm"], default="deterministic")
     parser.add_argument("--regression-threshold", type=float, default=0.05)
+    parser.add_argument("--evolver-model", default=os.getenv("EVOLVER_MODEL", "gpt-4o"))
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
@@ -286,7 +371,7 @@ def main():
 
     genome = SkillGenome.load(skill_dir)
     gen = genome.config.get("version", 0)
-    print(f"[evolve_skills] Skill: {genome.name} | Gen: {gen} | Judge: {args.judge}")
+    print(f"[evolve_skills] Skill: {genome.name} | Gen: {gen} | Judge: {args.judge} | Evolver: {args.evolver_model}")
 
     tasks = find_benchmark_tasks(benchmarks_dir, args.skill)
     print(f"[evolve_skills] Benchmark tasks: {len(tasks)}")
@@ -300,7 +385,7 @@ def main():
         return
 
     old_prompt = genome.prompt
-    new_prompt, hypothesis = evolve_skill(genome, pre_results)
+    new_prompt, hypothesis = evolve_skill(genome, pre_results, evolver_model=args.evolver_model)
     genome.save_prompt(new_prompt)
 
     print("[evolve_skills] Running post-evolution benchmarks...")
