@@ -1,0 +1,8 @@
+{
+  "description": "Back-to-back compactions with shared post-assistant",
+  "input": "Analyze /home/ocsam/projects/compaction-tracker/benchmarks/fixtures/multi-back-to-back.jsonl and estimate compaction overhead.",
+  "groundTruth": {
+    "compactionCount": 2,
+    "scoredCompactions": 2
+  }
+}

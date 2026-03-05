@@ -1,139 +1,116 @@
 # compaction-tracker
 
-Compaction cost tracker + Nous-powered skill evolution for OpenClaw.
+Compaction cost tracker + Nous-style self-evolution for OpenClaw skills.
 
 ## What this project is
 
-`compaction-tracker` is a small research-and-ops repo for one specific blind spot in OpenClaw session analytics: **compaction overhead**.
+`compaction-tracker` targets a blind spot: **compaction overhead is not explicitly surfaced** in OpenClaw spend views.
 
-It contains:
-- A first-pass OpenClaw skill (`skills/compaction-cost`) that estimates compaction token overhead from session JSONL logs.
-- A benchmark suite (`benchmarks/skills/compaction-cost`) to score quality and edge-case handling.
-- A lightweight Nous-style evolution loop (`src/nous/evolve_skills.py`) that can mutate and improve the skill prompt over generations.
+This repo provides:
+- A **compaction-cost skill spec** (`skills/compaction-cost`) that defines the estimation method.
+- A **real analyzer implementation** (`src/compaction_tracker/core.py`) used by CLI and benchmarks.
+- A **benchmark harness + evolution loop** (`src/nous/evolve_skills.py`) to track and improve behavior.
 
 ## Core insight
 
-Today, compaction cost is often operationally invisible: you see overall token usage, but not a direct "this much was spent due to compaction summarization" metric.
+Compaction overhead can be estimated from an **input-token spike** pattern:
 
-This project treats the skill prompt as an evolvable genome and uses benchmark feedback to improve how the metric is estimated.
+- For each `type="compaction"` event, find the first next assistant input tokens.
+- Subtract the average input tokens of the 3 prior assistant turns.
+- Sum deltas and convert using Claude Sonnet 4.6 input pricing ($3/MTok).
 
-**Key idea:** Nous is used to discover and refine the best practical measurement methodology (starting with the input spike delta heuristic), not just to produce a static one-off script.
+This turns hidden overhead into an explicit metric you can optimize.
 
-## How compaction events look in session JSONL files
-
-Session files are JSONL (one JSON object per line).
+## JSONL event shape (OpenClaw sessions)
 
 Compaction event example:
 
 ```json
-{"type":"compaction","id":"de531023","parentId":"4da00f8a","timestamp":"2026-02-26T04:22:25.955Z","summary":"...","firstKeptEntryId":"c9b53147","tokensBefore":110121,"details":{...}}
+{"type":"compaction","id":"de531023","timestamp":"2026-02-26T04:22:25.955Z","tokensBefore":110121}
 ```
 
-Regular assistant message example:
+Assistant message usage example:
 
 ```json
-{"type":"message","id":"...","message":{"role":"assistant","usage":{"input":5432,"output":847,"cacheRead":98210,"cacheWrite":0,"totalTokens":104489,"cost":{"input":0.016296,"output":0.012705,"cacheRead":0.049105,"cacheWrite":0.0,"total":0.078106}},...}}
+{"type":"message","message":{"role":"assistant","usage":{"input":5432}}}
 ```
 
-A memory flush signal appears immediately before compaction as a user message containing:
+A pre-compaction marker may appear as user content:
 - `"Pre-compaction memory flush"`
 
-## Directory structure
+## Project structure
 
 ```text
 compaction-tracker/
-├── skills/
-│   └── compaction-cost/
-│       ├── SKILL.md        # Skill prompt (the thing that evolves)
-│       ├── TESTS.md        # Expected behavior and acceptance criteria
-│       ├── HISTORY.md      # Generation-by-generation mutation log
-│       └── config.json     # Skill runtime/version metadata
+├── skills/compaction-cost/          # Prompt, tests, history, config
 ├── benchmarks/
-│   └── skills/
-│       └── compaction-cost/
-│           ├── task1/
-│           │   ├── task.json
-│           │   └── rubric.md
-│           ├── task2/
-│           │   ├── task.json
-│           │   └── rubric.md
-│           └── task3/
-│               ├── task.json
-│               └── rubric.md
+│   ├── fixtures/                    # Versioned sample JSONL logs
+│   └── skills/compaction-cost/      # taskN/task.json + rubric.md
 ├── src/
-│   ├── __init__.py
+│   ├── compaction_tracker/
+│   │   ├── core.py                  # Analyzer logic
+│   │   └── analyze.py               # CLI entrypoint
 │   └── nous/
-│       ├── __init__.py
-│       ├── skill_genome.py # Adapter for loading/saving skill artifacts
-│       └── evolve_skills.py# Evolution + benchmark loop scaffold
-├── scripts/
-│   └── run_evolution.sh    # Convenience wrapper for one generation
-├── .gitignore
-└── README.md
+│       ├── skill_genome.py
+│       └── evolve_skills.py         # Benchmark + evolution loop
+├── scripts/run_evolution.sh
+└── .github/workflows/ci.yml
 ```
 
-## Quick start: how to run a benchmark manually
+## Quick start
+
+### Run analyzer on a session
 
 ```bash
 cd /home/ocsam/projects/compaction-tracker
-PYTHONPATH=src python -m nous.evolve_skills --skill compaction-cost --root . --dry-run
+PYTHONPATH=src python -m compaction_tracker.analyze --session /tmp/sample-compaction-session.jsonl --pretty
 ```
 
-This loads benchmark tasks and runs the scaffolded benchmark pass without applying mutations.
-
-## How to run an evolution cycle
+### Run benchmarks manually
 
 ```bash
-cd /home/ocsam/projects/compaction-tracker
+PYTHONPATH=src python -m nous.evolve_skills --skill compaction-cost --root . --dry-run --judge deterministic
+```
+
+## Run an evolution cycle
+
+```bash
 ./scripts/run_evolution.sh compaction-cost
 ```
 
-Equivalent direct command:
+Or directly:
 
 ```bash
-PYTHONPATH=src python -m nous.evolve_skills --skill compaction-cost --root .
+PYTHONPATH=src python -m nous.evolve_skills --skill compaction-cost --root . --judge deterministic
 ```
 
-## How to add new benchmark tasks
+`--judge` supports:
+- `deterministic` (default, implemented)
+- `llm` (currently routed to deterministic placeholder until live judge wiring)
 
-1. Create a new task directory:
+## Add new benchmark tasks
 
-```bash
-mkdir -p benchmarks/skills/compaction-cost/task4
-```
+1. Create directory: `benchmarks/skills/compaction-cost/taskN/`
+2. Add `task.json` and `rubric.md`
+3. (Optional) add fixture file under `benchmarks/fixtures/*.jsonl`
+4. Re-run dry-run benchmark command
 
-2. Add `task.json` with:
-- `description`
-- `input`
-- `groundTruth` (or expected constraints)
+## Evolution story (expected)
 
-3. Add `rubric.md` with weighted scoring criteria.
+- **Gen 1:** baseline, obvious cases pass.
+- **Gen 2+**: tighter behavior on malformed logs, sparse usage fields, back-to-back compactions.
+- **Later generations:** improved robustness and better cost signal quality for real workloads.
 
-4. Re-run the benchmark dry-run:
+## Frugal-IQ integration
 
-```bash
-PYTHONPATH=src python -m nous.evolve_skills --skill compaction-cost --root . --dry-run
-```
+Use analyzer output as an extra cost stream in Frugal-IQ:
+- `estimatedCompactionTokens`
+- `estimatedUSD`
+- `compactionCount`
 
-The task loader auto-discovers all `task.json` files under `benchmarks/skills/<skill-name>/`.
-
-## The evolution story
-
-Expected progression over generations:
-- **Gen 1 (naive):** baseline heuristic, rough but usable.
-- **Gen N (more accurate):** improved event alignment, better edge-case handling, tighter estimates.
-
-As live execution + LLM judging are wired in, this loop should steadily improve benchmark scores and robustness.
-
-## How this integrates with Frugal-IQ
-
-Frugal-IQ focuses on reducing model spend via model/routing choices. `compaction-tracker` adds visibility into a hidden cost component: context compaction overhead.
-
-Together they help answer both:
-- Which model/setup is cheapest for the workload?
-- How much hidden token spend is being driven by compaction behavior?
+This complements model-routing savings by exposing hidden context-management overhead.
 
 ## Nous reference
 
 - https://github.com/nous-research/nous
-- Local Nous source on this machine: `/home/ocsam/.openclaw/workspace/nous/nous-main/`
+- Local source: `/home/ocsam/.openclaw/workspace/nous/nous-main/`

@@ -1,0 +1,9 @@
+{
+  "description": "Explicit zero-compaction fixture",
+  "input": "Analyze /home/ocsam/projects/compaction-tracker/benchmarks/fixtures/no-compaction.jsonl. Report compaction overhead.",
+  "groundTruth": {
+    "compactionCount": 0,
+    "estimatedCostUSD": 0.0,
+    "message": "No compaction overhead detected in this session."
+  }
+}

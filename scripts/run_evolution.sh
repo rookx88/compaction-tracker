@@ -4,4 +4,4 @@
 SKILL=${1:-compaction-cost}
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-python -m nous.evolve_skills --skill "$SKILL" --root "$ROOT" "${@:2}"
+PYTHONPATH=src python -m nous.evolve_skills --skill "$SKILL" --root "$ROOT" "${@:2}"

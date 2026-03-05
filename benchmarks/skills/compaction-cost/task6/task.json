@@ -1,0 +1,8 @@
+{
+  "description": "Missing usage fields and partial scorable data",
+  "input": "Analyze /home/ocsam/projects/compaction-tracker/benchmarks/fixtures/missing-usage.jsonl using the input spike delta method.",
+  "groundTruth": {
+    "compactionCount": 1,
+    "scoredCompactions": 1
+  }
+}

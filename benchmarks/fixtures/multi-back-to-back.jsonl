@@ -1,0 +1,7 @@
+{"type":"message","id":"a1","message":{"role":"assistant","usage":{"input":1000}}}
+{"type":"message","id":"a2","message":{"role":"assistant","usage":{"input":1100}}}
+{"type":"message","id":"a3","message":{"role":"assistant","usage":{"input":900}}}
+{"type":"compaction","id":"c1","timestamp":"2026-03-01T00:00:00Z","tokensBefore":120000}
+{"type":"message","id":"u1","message":{"role":"user","content":"Pre-compaction memory flush"}}
+{"type":"compaction","id":"c2","timestamp":"2026-03-01T00:00:05Z","tokensBefore":121000}
+{"type":"message","id":"a4","message":{"role":"assistant","usage":{"input":1800}}}
